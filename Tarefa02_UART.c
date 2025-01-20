@@ -1,40 +1,101 @@
 #include <stdio.h>
 #include "pico/stdlib.h"
 #include "hardware/uart.h"
+#include "hardware/watchdog.h"
 
-// UART defines
-// By default the stdout UART is `uart0`, so we will use the second one
-#define UART_ID uart1
+// Definições dos GPIOs
+#define LED_VERDE 11
+#define LED_AZUL  12
+#define LED_VERMELHO 13
+#define BUZZER 21
+
+// Configuração da UART
+#define UART_ID uart0
 #define BAUD_RATE 115200
+#define UART_TX_PIN 0
+#define UART_RX_PIN 1
 
-// Use pins 4 and 5 for UART1
-// Pins can be changed, see the GPIO function select table in the datasheet for information on GPIO assignments
-#define UART_TX_PIN 4
-#define UART_RX_PIN 5
+// Inicializa os GPIOs
+void setup_gpio() {
+    gpio_init(LED_VERDE);
+    gpio_init(LED_AZUL);
+    gpio_init(LED_VERMELHO);
+    gpio_init(BUZZER);
 
+    gpio_set_dir(LED_VERDE, GPIO_OUT);
+    gpio_set_dir(LED_AZUL, GPIO_OUT);
+    gpio_set_dir(LED_VERMELHO, GPIO_OUT);
+    gpio_set_dir(BUZZER, GPIO_OUT);
 
+    gpio_put(LED_VERDE, 0);
+    gpio_put(LED_AZUL, 0);
+    gpio_put(LED_VERMELHO, 0);
+    gpio_put(BUZZER, 0);
+}
 
-int main()
-{
-    stdio_init_all();
+// Controla os LEDs
+void control_leds(bool verde, bool azul, bool vermelho) {
+    gpio_put(LED_VERDE, verde);
+    gpio_put(LED_AZUL, azul);
+    gpio_put(LED_VERMELHO, vermelho);
+}
 
-    // Set up our UART
+// Controla o buzzer
+void control_buzzer(bool state) {
+    gpio_put(BUZZER, state);
+}
+
+// Lê comandos da UART e executa as ações correspondentes
+void process_commands() {
+    char command = uart_getc(UART_ID);
+
+    switch (command) {
+        case '1': // LED verde
+            control_leds(true, false, false);
+            break;
+        case '2': // LED azul
+            control_leds(false, true, false);
+            break;
+        case '3': // LED vermelho
+            control_leds(false, false, true);
+            break;
+        case '4': // Todos os LEDs (luz branca)
+            control_leds(true, true, true);
+            break;
+        case '5': // Desligar todos os LEDs
+            control_leds(false, false, false);
+            break;
+        case '6': // Acionar o buzzer por 2 segundos
+            control_buzzer(true);
+            sleep_ms(2000);
+            control_buzzer(false);
+            break;
+        case '7': // Reboot para modo de gravação
+            watchdog_reboot(0, 0, 0);
+            break;
+        default:
+            printf("Comando inválido!\n");
+            break;
+    }
+}
+
+int main() {
+
+    // Configuração da UART
     uart_init(UART_ID, BAUD_RATE);
-    // Set the TX and RX pins by using the function select on the GPIO
-    // Set datasheet for more information on function select
     gpio_set_function(UART_TX_PIN, GPIO_FUNC_UART);
     gpio_set_function(UART_RX_PIN, GPIO_FUNC_UART);
-    
-    // Use some the various UART functions to send out data
-    // In a default system, printf will also output via the default UART
-    
-    // Send out a string, with CR/LF conversions
-    uart_puts(UART_ID, " Hello, UART!\n");
-    
-    // For more examples of UART use see https://github.com/raspberrypi/pico-examples/tree/master/uart
 
+    setup_gpio();
+
+    printf("Sistema inicializado. Aguardando comandos...\n");
+
+    // Loop principal
     while (true) {
-        printf("Hello, world!\n");
-        sleep_ms(1000);
+        if (uart_is_readable(UART_ID)) {
+            process_commands();
+        }
     }
+
+    return 0;
 }
