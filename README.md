@@ -3,7 +3,7 @@ Integrantes:
  - Isabel Rosa de Santana (Isabelrs02)
 
 Vídeo:
- -
+ - [YouTube](https://youtu.be/YKXbNLax5ps?si=BQKlaQQZrwg2D15s).
 
 Este projeto implementa o controle de GPIOs utilizando a comunicação serial UART. O código permite o controle de LEDs RGB (GPIOs 11, 12 e 13) e de um buzzer (GPIO 21) com base nos comandos enviados pelo usuário.
 
