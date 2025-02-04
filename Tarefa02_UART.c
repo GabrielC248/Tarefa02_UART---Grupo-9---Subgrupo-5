@@ -1,12 +1,17 @@
 #include <stdio.h>
 #include "pico/stdlib.h"
 #include "hardware/uart.h"
+#include "hardware/pwm.h"
+#include "hardware/clocks.h"
 
 // Definições dos GPIOs
 #define LED_VERDE 11
 #define LED_AZUL  12
 #define LED_VERMELHO 13
-#define BUZZER 21
+#define BUZZER_PIN 21
+
+// Configuração da frequência do buzzer (em Hz)
+#define BUZZER_FREQUENCY 1000
 
 // Configuração da UART
 #define UART_ID uart0
@@ -19,17 +24,50 @@ void setup_gpio() {
     gpio_init(LED_VERDE);
     gpio_init(LED_AZUL);
     gpio_init(LED_VERMELHO);
-    gpio_init(BUZZER);
+    gpio_init(BUZZER_PIN);
 
     gpio_set_dir(LED_VERDE, GPIO_OUT);
     gpio_set_dir(LED_AZUL, GPIO_OUT);
     gpio_set_dir(LED_VERMELHO, GPIO_OUT);
-    gpio_set_dir(BUZZER, GPIO_OUT);
+    gpio_set_dir(BUZZER_PIN, GPIO_OUT);
 
     gpio_put(LED_VERDE, 0);
     gpio_put(LED_AZUL, 0);
     gpio_put(LED_VERMELHO, 0);
-    gpio_put(BUZZER, 0);
+}
+
+void pwm_init_buzzer(uint pin) {
+    // Configurar o pino como saída de PWM
+    gpio_set_function(pin, GPIO_FUNC_PWM);
+
+    // Obter o slice do PWM associado ao pino
+    uint slice_num = pwm_gpio_to_slice_num(pin);
+
+    // Configurar o PWM com frequência desejada
+    pwm_config config = pwm_get_default_config();
+    pwm_config_set_clkdiv(&config, clock_get_hz(clk_sys) / (BUZZER_FREQUENCY * 4096)); // Divisor de clock
+    pwm_init(slice_num, &config, true);
+
+    // Iniciar o PWM no nível baixo
+    pwm_set_gpio_level(pin, 0);
+}
+
+// Definição de uma função para emitir um beep com duração especificada
+void beep(uint pin, uint duration_ms) {
+    // Obter o slice do PWM associado ao pino
+    uint slice_num = pwm_gpio_to_slice_num(pin);
+
+    // Configurar o duty cycle para 50% (ativo)
+    pwm_set_gpio_level(pin, 2048);
+
+    // Temporização
+    sleep_ms(duration_ms);
+
+    // Desativar o sinal PWM (duty cycle 0)
+    pwm_set_gpio_level(pin, 0);
+
+    // Pausa entre os beeps
+    sleep_ms(100); // Pausa de 100ms
 }
 
 // Controla os LEDs
@@ -39,14 +77,8 @@ void control_leds(bool verde, bool azul, bool vermelho) {
     gpio_put(LED_VERMELHO, vermelho);
 }
 
-// Controla o buzzer
-void control_buzzer(bool state) {
-    gpio_put(BUZZER, state);
-}
-
 // Lê comandos da UART e executa as ações correspondentes
-void process_commands() {
-    char command = uart_getc(UART_ID);
+void process_commands(char command) {
 
     switch (command) {
         case '1': // LED verde
@@ -64,10 +96,8 @@ void process_commands() {
         case '5': // Desligar todos os LEDs
             control_leds(false, false, false);
             break;
-        case '6': // Acionar o buzzer por 2 segundos
-            control_buzzer(true);
-            sleep_ms(2000);
-            control_buzzer(false);
+        case '6': // Acionar o buzzer por meio segundo
+            beep(BUZZER_PIN, 500);
             break;
         default:
             printf("Comando inválido!\n");
@@ -76,6 +106,7 @@ void process_commands() {
 }
 
 int main() {
+    char command = 0;
     // Inicialização
     stdio_init_all();
 
@@ -85,101 +116,15 @@ int main() {
     gpio_set_function(UART_RX_PIN, GPIO_FUNC_UART);
 
     setup_gpio();
+    pwm_init_buzzer(BUZZER_PIN);
 
     printf("Sistema inicializado. Aguardando comandos...\n");
 
     // Loop principal
     while (true) {
-        if (uart_is_readable(UART_ID)) {
-            process_commands();
-        }
+        command = getchar();
+        process_commands(command);
     }
 
     return 0;
 }
-/*
-#include <stdio.h>        // Inclua para usar printf
-#include "pico/stdlib.h"  // Inclua o SDK padrão do Pico
-
-// Definição dos GPIOs
-#define LED_GREEN 11
-#define LED_BLUE 12
-#define LED_RED 13
-#define BUZZER 21
-
-// Funções para controlar os LEDs
-void turn_off_leds() {
-    gpio_put(LED_GREEN, 0);
-    gpio_put(LED_BLUE, 0);
-    gpio_put(LED_RED, 0);
-}
-
-void control_leds(uint led_gpio) {
-    turn_off_leds(); // Desliga todos os LEDs
-    gpio_put(led_gpio, 1); // Liga o LED especificado
-}
-
-// Função para acionar o buzzer
-void activate_buzzer() {
-    gpio_put(BUZZER, 1); // Liga o buzzer
-    sleep_ms(2000);      // Mantém por 2 segundos
-    gpio_put(BUZZER, 0); // Desliga o buzzer
-}
-
-int main() {
-    // Inicialização dos GPIOs
-    gpio_init(LED_GREEN);
-    gpio_init(LED_BLUE);
-    gpio_init(LED_RED);
-    gpio_init(BUZZER);
-
-    gpio_set_dir(LED_GREEN, GPIO_OUT);
-    gpio_set_dir(LED_BLUE, GPIO_OUT);
-    gpio_set_dir(LED_RED, GPIO_OUT);
-    gpio_set_dir(BUZZER, GPIO_OUT);
-
-    // Inicializa a comunicação serial
-    stdio_init_all();
-    printf("Sistema inicializado. Aguarde comandos...\n");
-
-    // Loop principal aguardando comandos via UART
-    while (true) {
-        char command;
-
-        // Lê o comando do terminal com timeout
-        command = getchar_timeout_us(100000); // Timeout de 100ms
-
-        if (command != PICO_ERROR_TIMEOUT) { // Processa apenas se houver entrada
-            switch (command) {
-                case 'g': // Ligar LED verde
-                    control_leds(LED_GREEN);
-                    break;
-                case 'b': // Ligar LED azul
-                    control_leds(LED_BLUE);
-                    break;
-                case 'r': // Ligar LED vermelho
-                    control_leds(LED_RED);
-                    break;
-                case 'w': // Ligar todos os LEDs (branco)
-                    gpio_put(LED_GREEN, 1);
-                    gpio_put(LED_BLUE, 1);
-                    gpio_put(LED_RED, 1);
-                    break;
-                case 'o': // Desligar todos os LEDs
-                    turn_off_leds();
-                    break;
-                case 'z': // Acionar o buzzer
-                    activate_buzzer();
-                    break;
-                case 'q': // Sair
-                    printf("Saindo...\n");
-                    return 0;
-                default:
-                    printf("Comando inválido!\n");
-            }
-        }
-    }
-
-    return 0;
-}
-*/
