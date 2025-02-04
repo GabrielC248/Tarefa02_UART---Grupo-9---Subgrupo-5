@@ -28,4 +28,4 @@ Este projeto implementa o controle de GPIOs utilizando a comunicação serial UA
     - 3 para ligar LED vermelho;
     - 4 para ligar todos os LEDs;
     - 5 para desligar todos os LEDs;
-    - 6 para acionar o buzzer por 2 segundos.
+    - 6 para acionar o buzzer por meio segundo.
